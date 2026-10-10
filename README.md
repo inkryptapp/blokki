@@ -1,79 +1,43 @@
-# Svelte library
+# blokki
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+A Svelte 5 library for block-based rich-text editing, built on [Lexical](https://lexical.dev), with optional real-time collaboration.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+blokki is in early development. Nothing is published to npm yet.
 
-## Creating a project
+## Package entry points
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-pnpm dlx sv@1.1.1 create --template library --types ts --add vitest="usages:unit,component" playwright="demo:yes" tailwindcss="plugins:none" --install pnpm svelte-lexical
-```
-
-## Adding features
-
-Add features to your project with `sv add`:
-
-```sh
-npx sv add
-```
-
-For example, to add Tailwind CSS:
-
-```sh
-npx sv add tailwindcss
-```
+| Import        | Contents                                                                 |
+| ------------- | ------------------------------------------------------------------------ |
+| `blokki`      | Svelte components and the Editor API.                                    |
+| `blokki/core` | Headless document functions. They run in Node and import no Svelte code. |
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Install dependencies with [pnpm](https://pnpm.io):
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+pnpm install
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+`pnpm install` runs the `prepare` script, which sets `core.hooksPath` to `.githooks`. The pre-commit hook in that directory runs lint-staged, which lints staged files with oxlint and formats them with oxfmt.
 
-## Building
+> [!NOTE]
+> While `core.hooksPath` points at `.githooks`, Git ignores the hooks in `.git/hooks`. To keep a personal hook, call it from the matching script in `.githooks`.
 
-To build your library:
+| Command          | What it does                                                           |
+| ---------------- | ---------------------------------------------------------------------- |
+| `pnpm dev`       | Starts the docs site and playground.                                   |
+| `pnpm lint`      | Lints TypeScript, JavaScript, and Svelte scripts with oxlint.          |
+| `pnpm format`    | Formats the repository with oxfmt.                                     |
+| `pnpm check`     | Type-checks with `svelte-check`.                                       |
+| `pnpm test:unit` | Runs Vitest in Node and in a browser.                                  |
+| `pnpm test:e2e`  | Runs Playwright in Chromium, Firefox, and WebKit.                      |
+| `pnpm build`     | Builds the site and the package, then checks the package with publint. |
+| `pnpm attw`      | Checks the package's type declarations with `@arethetypeswrong/cli`.   |
+| `pnpm size`      | Checks the size budget of each entry point. Run `pnpm build` first.    |
 
-```sh
-npm pack
-```
+Record user-facing changes with `pnpm changeset`.
 
-To create a production version of your showcase app:
+## License
 
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```sh
-npm publish
-```
+[MIT](LICENSE)

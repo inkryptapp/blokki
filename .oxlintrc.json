@@ -1,0 +1,48 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "unicorn", "oxc", "import"],
+	"rules": {
+		"curly": ["error", "all"],
+		"import/no-commonjs": "error",
+		"typescript/consistent-type-imports": "error",
+		"typescript/no-explicit-any": "error",
+		"typescript/no-non-null-assertion": "error"
+	},
+	"ignorePatterns": [".svelte-kit/**", "build/**", "dist/**"],
+	"overrides": [
+		{
+			"files": ["src/lib/core/**"],
+			"rules": {
+				"no-restricted-imports": [
+					"error",
+					{
+						"paths": [
+							{
+								"name": "svelte",
+								"message": "The headless core must not depend on Svelte."
+							}
+						],
+						"patterns": [
+							{
+								"group": ["svelte/*"],
+								"message": "The headless core must not depend on Svelte."
+							},
+							{
+								"regex": "\\.svelte(\\.[cm]?[jt]s)?$",
+								"message": "The headless core must not import Svelte components or rune modules."
+							},
+							{
+								"regex": "(^|/)(components|ui)(/|$)",
+								"message": "The headless core must not import UI modules."
+							},
+							{
+								"regex": "^(\\$lib|#lib|(\\.\\./)+(index(\\.[jt]s)?)?|\\.\\.)$",
+								"message": "The package root re-exports UI modules. Import from inside the core directory instead."
+							}
+						]
+					}
+				]
+			}
+		}
+	]
+}
