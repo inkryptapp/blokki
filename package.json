@@ -1,5 +1,5 @@
 {
-	"name": "@inkrypt/svelte-lexical",
+	"name": "blokki",
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
