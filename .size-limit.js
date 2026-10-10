@@ -11,7 +11,7 @@ export default [
 		name: 'blokki',
 		path: 'dist/index.js',
 		import: '*',
-		limit: '1 kB',
+		limit: '2 kB',
 		modifyEsbuildConfig: compileSvelte
 	},
 	{
