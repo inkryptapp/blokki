@@ -24,19 +24,28 @@ pnpm install
 > [!NOTE]
 > While `core.hooksPath` points at `.githooks`, Git ignores the hooks in `.git/hooks`. To keep a personal hook, call it from the matching script in `.githooks`.
 
-| Command          | What it does                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm dev`       | Starts the docs site and playground.                                                                                                                         |
-| `pnpm lint`      | Lints TypeScript, JavaScript, and Svelte scripts with oxlint.                                                                                                |
-| `pnpm format`    | Formats the repository with oxfmt.                                                                                                                           |
-| `pnpm check`     | Type-checks with `svelte-check`.                                                                                                                             |
-| `pnpm test:unit` | Runs Vitest in Node and in a browser.                                                                                                                        |
-| `pnpm test:e2e`  | Runs Playwright in Chromium, Firefox, and WebKit.                                                                                                            |
-| `pnpm build`     | Builds the site and the package, then checks the package with publint.                                                                                       |
-| `pnpm attw`      | Checks the package's type declarations with `@arethetypeswrong/cli`. The Svelte entry skips TypeScript's node16 check, which cannot resolve `.svelte` files. |
-| `pnpm size`      | Checks the size budget of each entry point. Run `pnpm build` first.                                                                                          |
+| Command           | What it does                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`        | Starts the docs site and playground.                                                                                                                         |
+| `pnpm lint`       | Lints TypeScript, JavaScript, and Svelte scripts with oxlint.                                                                                                |
+| `pnpm format`     | Formats the repository with oxfmt.                                                                                                                           |
+| `pnpm check`      | Type-checks with `svelte-check`.                                                                                                                             |
+| `pnpm test:unit`  | Runs Vitest in Node and in a browser.                                                                                                                        |
+| `pnpm test:e2e`   | Runs Playwright in Chromium, Firefox, and WebKit.                                                                                                            |
+| `pnpm build`      | Builds the site and the package, then checks the package with publint.                                                                                       |
+| `pnpm build:site` | Builds only the docs site into `build`.                                                                                                                      |
+| `pnpm attw`       | Checks the package's type declarations with `@arethetypeswrong/cli`. The Svelte entry skips TypeScript's node16 check, which cannot resolve `.svelte` files. |
+| `pnpm size`       | Checks the size budget of each entry point. Run `pnpm build` first.                                                                                          |
 
 Record user-facing changes with `pnpm changeset`.
+
+## Docs site
+
+The SvelteKit app in `src/routes` is the docs site and playground. It is fully prerendered with `adapter-static`. Every push to `main` deploys it to GitHub Pages through `.github/workflows/pages.yml`, with `BASE_PATH` set to the repository name.
+
+GitHub Pages must be enabled once in the repository settings: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+To build the site locally under the same base path, run `BASE_PATH=/blokki pnpm build:site`.
 
 ## License
 

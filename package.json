@@ -36,7 +36,8 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && pnpm run prepack",
+		"build": "pnpm run build:site && pnpm run prepack",
+		"build:site": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''; git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
 		"prepack": "svelte-kit sync && svelte-package && publint",
@@ -60,7 +61,7 @@
 		"@playwright/test": "^1.60.0",
 		"@size-limit/esbuild": "^14.2.0",
 		"@size-limit/file": "^14.2.0",
-		"@sveltejs/adapter-auto": "^8.0.0",
+		"@sveltejs/adapter-static": "^4.0.0",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/package": "^2.5.8",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",

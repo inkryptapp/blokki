@@ -23,7 +23,7 @@ test('the playground Editor renders on the server, hydrates, and accepts typing'
 		observer.observe(document, { childList: true, subtree: true });
 	});
 
-	const response = await page.goto('/playground');
+	const response = await page.goto('playground');
 
 	expect(response?.status()).toBe(200);
 	expect(await response?.text()).toContain('data-testid="editor-skeleton"');
