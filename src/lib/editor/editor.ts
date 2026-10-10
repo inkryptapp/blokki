@@ -6,8 +6,14 @@ import {
 	type AnyLexicalExtensionArgument,
 	type LexicalEditorWithDispose
 } from '@lexical/extension';
-import { RichTextExtension } from '@lexical/rich-text';
 import { defineExtension, type LexicalEditor } from 'lexical';
+import {
+	CoreExtension,
+	createHeadlessEditor,
+	exportSnapshot,
+	importSnapshot,
+	type Snapshot
+} from '../core/index.js';
 
 /** Options for {@link createEditor}. */
 export interface EditorOptions {
@@ -18,6 +24,10 @@ export interface EditorOptions {
 	 * @defaultValue `[]`
 	 */
 	readonly extensions?: readonly AnyLexicalExtensionArgument[];
+	/**
+	 * The document to start with. Without it, the Editor starts with one empty paragraph.
+	 */
+	readonly content?: Snapshot;
 }
 
 /**
@@ -35,6 +45,13 @@ export interface Editor {
 	 * @throws Error when no `EditorContent` shows this Editor.
 	 */
 	readonly lexical: LexicalEditor;
+
+	/**
+	 * Returns the current document as a Snapshot. While the Editor is not mounted, it returns the
+	 * content that the next mount shows: the `content` option at first, and the last mounted
+	 * state after an unmount.
+	 */
+	getSnapshot(): Snapshot;
 }
 
 /** Keeps the root's `contenteditable` attribute in step with Lexical's editable state. */
@@ -58,9 +75,29 @@ const ContentEditableExtension = defineExtension({
 class EditorController implements Editor {
 	readonly #extensions: AnyLexicalExtensionArgument[];
 	#lexical: LexicalEditorWithDispose | null = null;
+	/** The content the next mount loads. It is updated from the Lexical editor on unmount. */
+	#content: Snapshot | undefined;
 
-	constructor({ extensions = [] }: EditorOptions) {
+	constructor({ extensions = [], content }: EditorOptions) {
 		this.#extensions = [...extensions];
+		this.#content = content;
+	}
+
+	getSnapshot(): Snapshot {
+		if (this.#lexical !== null) {
+			return exportSnapshot(this.#lexical);
+		}
+		// Round-trips through a headless editor, so the result has the same form as a mounted
+		// export, including the schema map of the enabled Extensions.
+		const headless = createHeadlessEditor({ extensions: this.#extensions });
+		try {
+			if (this.#content !== undefined) {
+				importSnapshot(headless, this.#content);
+			}
+			return exportSnapshot(headless);
+		} finally {
+			headless.dispose();
+		}
 	}
 
 	get lexical(): LexicalEditor {
@@ -79,12 +116,21 @@ class EditorController implements Editor {
 		const lexical = buildEditorFromExtensions(
 			defineExtension({
 				name: 'blokki/editor',
-				dependencies: [RichTextExtension, ContentEditableExtension, ...this.#extensions]
+				dependencies: [CoreExtension, ContentEditableExtension, ...this.#extensions]
 			})
 		);
+		if (this.#content !== undefined) {
+			try {
+				importSnapshot(lexical, this.#content);
+			} catch (error) {
+				lexical.dispose();
+				throw error;
+			}
+		}
 		lexical.setRootElement(root);
 		this.#lexical = lexical;
 		return () => {
+			this.#content = exportSnapshot(lexical);
 			this.#lexical = null;
 			lexical.dispose();
 		};
@@ -117,6 +163,8 @@ export function createEditor(options: EditorOptions = {}): Editor {
  *
  * @throws TypeError when `editor` does not come from {@link createEditor}.
  * @throws Error when `editor` is already mounted.
+ * @throws The error from `importSnapshot` when the Editor's content cannot be loaded. The Lexical
+ * editor is disposed first.
  */
 export function mountEditor(editor: Editor, root: HTMLElement): () => void {
 	if (!(editor instanceof EditorController)) {
