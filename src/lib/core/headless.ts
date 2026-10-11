@@ -6,6 +6,7 @@ import {
 import { RichTextExtension } from '@lexical/rich-text';
 import { defineExtension } from 'lexical';
 import { declareSchema } from './schema.js';
+import { SharedDocumentExtension } from './shared-document.js';
 
 /**
  * The node types that every Editor has: root, paragraph, text, line break, tab, heading, and
@@ -13,7 +14,11 @@ import { declareSchema } from './schema.js';
  */
 export const CoreExtension = defineExtension({
 	name: 'blokki/core',
-	dependencies: [RichTextExtension, declareSchema({ name: 'core', version: 1 })]
+	dependencies: [
+		RichTextExtension,
+		SharedDocumentExtension,
+		declareSchema({ name: 'core', version: 1 })
+	]
 });
 
 /** Options for {@link createHeadlessEditor}. */

@@ -11,6 +11,37 @@
 	"ignorePatterns": [".svelte-kit/**", "build/**", "dist/**"],
 	"overrides": [
 		{
+			"files": ["src/lib/**"],
+			"excludeFiles": ["src/lib/collab/**", "src/lib/core/**"],
+			"rules": {
+				"no-restricted-imports": [
+					"error",
+					{
+						"paths": [
+							{
+								"name": "yjs",
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
+							},
+							{
+								"name": "@lexical/yjs",
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
+							}
+						],
+						"patterns": [
+							{
+								"group": ["yjs/*", "@lexical/yjs/*"],
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
+							},
+							{
+								"regex": "(^|/)collab(/|$)",
+								"message": "Only the blokki/collab entry point may import collaboration code."
+							}
+						]
+					}
+				]
+			}
+		},
+		{
 			"files": ["src/lib/core/**"],
 			"rules": {
 				"no-restricted-imports": [
@@ -20,6 +51,14 @@
 							{
 								"name": "svelte",
 								"message": "The headless core must not depend on Svelte."
+							},
+							{
+								"name": "yjs",
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
+							},
+							{
+								"name": "@lexical/yjs",
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
 							}
 						],
 						"patterns": [
@@ -38,6 +77,14 @@
 							{
 								"regex": "^(\\$lib|#lib|(\\.\\./)+(index(\\.[jt]s)?)?|\\.\\.)$",
 								"message": "The package root re-exports UI modules. Import from inside the core directory instead."
+							},
+							{
+								"group": ["yjs/*", "@lexical/yjs/*"],
+								"message": "Only src/lib/collab may load Yjs, so that Editors without collaboration do not bundle it."
+							},
+							{
+								"regex": "(^|/)collab(/|$)",
+								"message": "Only the blokki/collab entry point may import collaboration code."
 							}
 						]
 					}

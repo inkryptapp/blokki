@@ -14,6 +14,7 @@ import {
 	importSnapshot,
 	type Snapshot
 } from '../core/index.js';
+import { usesSharedDocument } from '../core/shared-document.js';
 
 /** Options for {@link createEditor}. */
 export interface EditorOptions {
@@ -25,7 +26,8 @@ export interface EditorOptions {
 	 */
 	readonly extensions?: readonly AnyLexicalExtensionArgument[];
 	/**
-	 * The document to start with. Without it, the Editor starts with one empty paragraph.
+	 * The document to start with. Without it, the Editor starts with one empty paragraph. When
+	 * collaboration is on, the Shared Document provides the content and this option is ignored.
 	 */
 	readonly content?: Snapshot;
 }
@@ -49,7 +51,8 @@ export interface Editor {
 	/**
 	 * Returns the current document as a Snapshot. While the Editor is not mounted, it returns the
 	 * content that the next mount shows: the `content` option at first, and the last mounted
-	 * state after an unmount.
+	 * state after an unmount. When collaboration is on, the Snapshot is derived from the Shared
+	 * Document.
 	 */
 	getSnapshot(): Snapshot;
 }
@@ -91,7 +94,7 @@ class EditorController implements Editor {
 		// export, including the schema map of the enabled Extensions.
 		const headless = createHeadlessEditor({ extensions: this.#extensions });
 		try {
-			if (this.#content !== undefined) {
+			if (this.#content !== undefined && !usesSharedDocument(headless)) {
 				importSnapshot(headless, this.#content);
 			}
 			return exportSnapshot(headless);
@@ -119,7 +122,7 @@ class EditorController implements Editor {
 				dependencies: [CoreExtension, ContentEditableExtension, ...this.#extensions]
 			})
 		);
-		if (this.#content !== undefined) {
+		if (this.#content !== undefined && !usesSharedDocument(lexical)) {
 			try {
 				importSnapshot(lexical, this.#content);
 			} catch (error) {

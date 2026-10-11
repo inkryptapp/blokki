@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { build } from 'esbuild';
+import sveltePlugin from 'esbuild-svelte';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -45,5 +47,28 @@ describe('subpath exports', () => {
 	it('rejects a module that touches a browser global at import time', async () => {
 		const fixture = fileURLToPath(new URL('src/test-fixtures/touches-browser-global.ts', root));
 		await expect(importWithoutBrowserGlobals(fixture)).rejects.toThrow(ReferenceError);
+	});
+});
+
+describe('the Svelte entry', () => {
+	it('bundles no collaboration code', async () => {
+		const { metafile } = await build({
+			entryPoints: [fileURLToPath(new URL('src/lib/index.ts', root))],
+			bundle: true,
+			write: false,
+			metafile: true,
+			format: 'esm',
+			packages: 'external',
+			plugins: [sveltePlugin()],
+			logLevel: 'silent'
+		});
+		const inputs = Object.keys(metafile.inputs);
+		const packages = Object.values(metafile.outputs).flatMap(({ imports }) =>
+			imports.map(({ path }) => path)
+		);
+
+		expect(inputs).toContainEqual(expect.stringMatching(/src\/lib\/editor\/editor\.ts$/));
+		expect(inputs.filter((input) => input.includes('src/lib/collab/'))).toEqual([]);
+		expect(packages.filter((path) => /^(yjs|@lexical\/yjs)(\/|$)/.test(path))).toEqual([]);
 	});
 });

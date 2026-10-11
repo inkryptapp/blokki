@@ -6,10 +6,11 @@ blokki is in early development. Nothing is published to npm yet.
 
 ## Package entry points
 
-| Import        | Contents                                                                 |
-| ------------- | ------------------------------------------------------------------------ |
-| `blokki`      | Svelte components and the Editor API.                                    |
-| `blokki/core` | Headless document functions. They run in Node and import no Svelte code. |
+| Import          | Contents                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| `blokki`        | Svelte components and the Editor API.                                                               |
+| `blokki/core`   | Headless document functions. They run in Node and import no Svelte code.                            |
+| `blokki/collab` | Real-time collaboration through Yjs. Needs the optional peer dependencies `yjs` and `@lexical/yjs`. |
 
 ## Developing
 

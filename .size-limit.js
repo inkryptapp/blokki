@@ -19,5 +19,11 @@ export default [
 		path: 'dist/core/index.js',
 		import: '*',
 		limit: '2 kB'
+	},
+	{
+		name: 'blokki/collab',
+		path: 'dist/collab/index.js',
+		import: '*',
+		limit: '3 kB'
 	}
 ];

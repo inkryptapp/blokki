@@ -7,6 +7,7 @@ import {
 	type SerializedRootNode
 } from 'lexical';
 import { NewerSchemaVersionError, schemaVersionsOf, type SchemaMap } from './schema.js';
+import { usesSharedDocument } from './shared-document.js';
 
 /**
  * The complete content of a document in blokki's portable, versioned format: Lexical's serialized
@@ -83,8 +84,15 @@ export function parseSnapshot(value: unknown): Snapshot {
  * enabled Extension than the editor supports.
  * @throws {@link InvalidSnapshotError} when Lexical cannot parse the Snapshot, for example
  * because it contains a node type that the editor does not have.
+ * @throws Error when a Shared Document provides the editor's content. A Shared Document is never
+ * rebuilt from a Snapshot. Seed a new Shared Document instead.
  */
 export function importSnapshot(editor: LexicalEditor, snapshot: Snapshot): void {
+	if (usesSharedDocument(editor)) {
+		throw new Error(
+			"A Shared Document provides this editor's content, so a Snapshot cannot be imported into it. Seed a new Shared Document instead."
+		);
+	}
 	const supported = schemaVersionsOf(editor);
 	for (const [schema, documentVersion] of Object.entries(snapshot.schema)) {
 		const supportedVersion = supported[schema];
