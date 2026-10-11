@@ -16,6 +16,7 @@ import {
 	type Snapshot,
 	type UpgradeRequiredError
 } from '../core/index.js';
+import { findBlockKey } from '../core/block-id.js';
 import { loadRoot } from '../core/snapshot.js';
 import { sharedDocumentOf, usesSharedDocument } from '../core/shared-document.js';
 
@@ -41,6 +42,12 @@ export interface EditorOptions {
 	 * Called at most once.
 	 */
 	readonly onUpgradeRequired?: (error: UpgradeRequiredError) => void;
+	/**
+	 * Builds the URL of an Anchor Link, which points to one Block through its Block ID.
+	 *
+	 * @defaultValue `` (blockId) => `#${blockId}` ``
+	 */
+	readonly anchorLink?: (blockId: string) => string;
 }
 
 /**
@@ -75,6 +82,15 @@ export interface Editor {
 	 * is read-only, and {@link Editor.getSnapshot} returns the document unchanged.
 	 */
 	readonly upgradeRequired: UpgradeRequiredError | null;
+
+	/** Returns the Anchor Link URL of a Block, built by the `anchorLink` option. */
+	getAnchorLink(blockId: string): string;
+
+	/**
+	 * Scrolls the Block with `blockId` into view. Returns false when the Editor is not mounted or
+	 * has no such Block.
+	 */
+	scrollToBlock(blockId: string): boolean;
 }
 
 /** Keeps the root's `contenteditable` attribute in step with Lexical's editable state. */
@@ -101,12 +117,34 @@ class EditorController implements Editor {
 	/** The content the next mount loads. It is updated from the Lexical editor on unmount. */
 	#content: Snapshot | undefined;
 	readonly #onUpgradeRequired: ((error: UpgradeRequiredError) => void) | undefined;
+	readonly #anchorLink: (blockId: string) => string;
 	#upgradeRequired: UpgradeRequiredError | null = null;
 
-	constructor({ extensions = [], content, onUpgradeRequired }: EditorOptions) {
+	constructor({
+		extensions = [],
+		content,
+		onUpgradeRequired,
+		anchorLink = (blockId) => `#${blockId}`
+	}: EditorOptions) {
 		this.#extensions = [...extensions];
 		this.#content = content;
 		this.#onUpgradeRequired = onUpgradeRequired;
+		this.#anchorLink = anchorLink;
+	}
+
+	getAnchorLink(blockId: string): string {
+		return this.#anchorLink(blockId);
+	}
+
+	scrollToBlock(blockId: string): boolean {
+		const lexical = this.#lexical;
+		if (lexical === null) {
+			return false;
+		}
+		const key = findBlockKey(lexical, blockId);
+		const element = key === null ? null : lexical.getElementByKey(key);
+		element?.scrollIntoView({ block: 'start' });
+		return element !== null && element !== undefined;
 	}
 
 	get upgradeRequired(): UpgradeRequiredError | null {
@@ -131,7 +169,13 @@ class EditorController implements Editor {
 					throw error;
 				}
 			}
-			return this.#export(headless);
+			if (usesSharedDocument(headless)) {
+				return this.#export(headless);
+			}
+			// The import can add Block IDs and run Migrations, and an empty document gets a new
+			// paragraph. Keeping the result makes the next export and the next mount agree with it.
+			this.#content = this.#export(headless);
+			return this.#content;
 		} finally {
 			headless.dispose();
 		}

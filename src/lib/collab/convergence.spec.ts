@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { LexicalEditorWithDispose } from '@lexical/extension';
 import {
 	$createParagraphNode,
+	configExtension,
 	$createTextNode,
 	$getRoot,
 	$isParagraphNode,
@@ -10,8 +11,18 @@ import {
 } from 'lexical';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { Network, type Faults, type TestProvider } from '../../test-utils/collab/network.js';
-import { createHeadlessEditor, exportSnapshot, parseSnapshot } from '../core/index.js';
+import {
+	createRandom,
+	Network,
+	type Faults,
+	type TestProvider
+} from '../../test-utils/collab/network.js';
+import {
+	BlockIdExtension,
+	createHeadlessEditor,
+	exportSnapshot,
+	parseSnapshot
+} from '../core/index.js';
 import { collaboration } from './index.js';
 import { seedSharedDocument } from './seed.js';
 
@@ -48,7 +59,19 @@ function joinPeers(network: Network, count: number): Peer[] {
 		}
 		const provider = network.join(doc);
 		const user = { id: `user-${index}`, name: `User ${index}` };
-		const editor = createHeadlessEditor({ extensions: [collaboration({ doc, provider, user })] });
+		// Block IDs from a seeded generator keep a seed reproducible.
+		const random = createRandom(doc.clientID);
+		const createId = () =>
+			Math.floor(random() * 2 ** 50)
+				.toString(36)
+				.padStart(10, '0')
+				.slice(-10);
+		const editor = createHeadlessEditor({
+			extensions: [
+				configExtension(BlockIdExtension, { createId }),
+				collaboration({ doc, provider, user })
+			]
+		});
 		// A headless editor never mounts, so the test connects its provider.
 		provider.connect();
 		return { editor, provider };

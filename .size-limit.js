@@ -11,19 +11,19 @@ export default [
 		name: 'blokki',
 		path: 'dist/index.js',
 		import: '*',
-		limit: '4 kB',
+		limit: '5 kB',
 		modifyEsbuildConfig: compileSvelte
 	},
 	{
 		name: 'blokki/core',
 		path: 'dist/core/index.js',
 		import: '*',
-		limit: '3 kB'
+		limit: '4 kB'
 	},
 	{
 		name: 'blokki/collab',
 		path: 'dist/collab/index.js',
 		import: '*',
-		limit: '4 kB'
+		limit: '6 kB'
 	}
 ];

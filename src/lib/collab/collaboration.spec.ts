@@ -6,6 +6,7 @@ import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
+	HISTORY_MERGE_TAG,
 	REDO_COMMAND,
 	UNDO_COMMAND,
 	type LexicalEditor
@@ -13,7 +14,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { Network } from '../../test-utils/collab/network.js';
-import { createHeadlessEditor, exportSnapshot, parseSnapshot } from '../core/index.js';
+import { $getBlockId, createHeadlessEditor, exportSnapshot, parseSnapshot } from '../core/index.js';
 import { createEditor } from '../index.js';
 import { collaboration, CollaborationExtension, seedSharedDocument } from './index.js';
 
@@ -138,6 +139,30 @@ describe('Seeding', () => {
 	});
 });
 
+describe('Block IDs in a Shared Document', () => {
+	it('reach a second Editor unchanged', () => {
+		const network = new Network(8);
+		const doc = new Y.Doc();
+		seedSharedDocument(doc, paragraphs);
+		const ada = joinHeadless(network, doc, 'Ada');
+		const grace = joinHeadless(network, new Y.Doc(), 'Grace');
+		network.run();
+
+		appendParagraph(ada.editor, 'With a new Block ID.');
+		network.run();
+
+		const idsOf = (editor: LexicalEditor) =>
+			editor.read(() => $getRoot().getChildren().map($getBlockId));
+		const ids = idsOf(ada.editor);
+		expect(ids).toHaveLength(5);
+		expect(ids.every((id) => id !== null)).toBe(true);
+		expect(idsOf(grace.editor)).toEqual(ids);
+		ada.editor.dispose();
+		grace.editor.dispose();
+		network.destroy();
+	});
+});
+
 describe('an Editor that connects to an empty Shared Document', () => {
 	it('does not seed it', () => {
 		const network = new Network(4);
@@ -203,6 +228,31 @@ describe('undo with collaboration', () => {
 
 		expect(editor.read(() => $getRoot().getTextContent())).toContain('first words');
 		expect(provider.doc.get('root-v2', Y.XmlElement).toString()).toContain('first words');
+		editor.dispose();
+		network.destroy();
+	});
+
+	it('treats an update tagged to merge into history as a user edit', () => {
+		const network = new Network(9);
+		const doc = new Y.Doc();
+		seedSharedDocument(doc, paragraphs);
+		const { editor } = joinHeadless(network, doc, 'Ada');
+
+		editor.update(
+			() => {
+				$getRoot().append($createParagraphNode().append($createTextNode('first')));
+			},
+			{ discrete: true }
+		);
+		editor.update(
+			() => {
+				$getRoot().append($createParagraphNode().append($createTextNode('second')));
+			},
+			{ discrete: true, tag: HISTORY_MERGE_TAG }
+		);
+		editor.dispatchCommand(UNDO_COMMAND, undefined);
+
+		expect(exportSnapshot(editor)).toEqual(paragraphs);
 		editor.dispose();
 		network.destroy();
 	});

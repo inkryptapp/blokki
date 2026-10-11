@@ -41,6 +41,7 @@ import {
 	type XmlText,
 	type YEvent
 } from 'yjs';
+import { BLOCK_ID_REPAIR_TAG } from '../core/block-id.js';
 import { schemaOf } from '../core/schema.js';
 import { SharedDocumentExtension, sharedDocumentOf } from '../core/shared-document.js';
 import { checkSchema, raiseSchema, schemaMetadataOf } from './schema-metadata.js';
@@ -412,9 +413,10 @@ export const CollaborationExtension = defineExtension({
 					if (tags.has(SKIP_COLLAB_TAG) || !updateSchemaStatus()) {
 						return;
 					}
-					// A refill is not a user edit, and capturing it would clear the redo stack. The undo
-					// manager skips transactions while isBootstrapping is set.
-					const refill = isRefill(prevEditorState, editorState, tags);
+					// A refill is not a user edit, and capturing it would clear the redo stack. Neither is a
+					// Block ID repair. The undo manager skips transactions while isBootstrapping is set.
+					const refill =
+						isRefill(prevEditorState, editorState, tags) || tags.has(BLOCK_ID_REPAIR_TAG);
 					binding.isBootstrapping ||= refill;
 					try {
 						options.doc.transact((transaction) => {

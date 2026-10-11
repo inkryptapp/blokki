@@ -49,4 +49,28 @@ describe('createEditor', () => {
 
 		expect(editor.getSnapshot()).toBe(newer);
 	});
+
+	it('gives content without Block IDs the same IDs on every export', () => {
+		const text = readFileSync(
+			new URL('../../test-fixtures/snapshots/paragraphs.json', import.meta.url),
+			'utf8'
+		);
+		const content = parseSnapshot(JSON.parse(text));
+		const withoutIds = {
+			...content,
+			root: {
+				...content.root,
+				children: content.root.children.map(({ $: _state, ...node }) => node)
+			}
+		};
+		const editor = createEditor({ content: withoutIds });
+
+		expect(editor.getSnapshot()).toEqual(editor.getSnapshot());
+	});
+
+	it('gives an Editor without content the same Block ID on every export', () => {
+		const editor = createEditor();
+
+		expect(editor.getSnapshot()).toEqual(editor.getSnapshot());
+	});
 });

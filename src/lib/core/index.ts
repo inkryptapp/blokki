@@ -4,6 +4,7 @@
  *
  * @packageDocumentation
  */
+export { $getBlockId, BlockIdExtension, createBlockId, type BlockIdConfig } from './block-id.js';
 export { CoreExtension, createHeadlessEditor, type HeadlessEditorOptions } from './headless.js';
 export {
 	declareSchema,

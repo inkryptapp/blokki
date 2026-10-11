@@ -4,7 +4,8 @@ import {
 	type LexicalEditorWithDispose
 } from '@lexical/extension';
 import { RichTextExtension } from '@lexical/rich-text';
-import { defineExtension } from 'lexical';
+import { configExtension, defineExtension, ParagraphNode } from 'lexical';
+import { BlockIdExtension } from './block-id.js';
 import { declareSchema } from './schema.js';
 import { SharedDocumentExtension } from './shared-document.js';
 import { UnsupportedContentExtension } from './unsupported.js';
@@ -20,6 +21,8 @@ export const CoreExtension = defineExtension({
 		RichTextExtension,
 		SharedDocumentExtension,
 		UnsupportedContentExtension,
+		// The paragraph is the only Block type so far.
+		configExtension(BlockIdExtension, { blockTypes: [ParagraphNode] }),
 		declareSchema({ name: 'core', version: 1 })
 	]
 });
