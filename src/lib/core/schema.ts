@@ -1,4 +1,10 @@
-import { configExtension, defineExtension, safeCast, type LexicalEditor } from 'lexical';
+import {
+	configExtension,
+	defineExtension,
+	safeCast,
+	type LexicalEditor,
+	type SerializedRootNode
+} from 'lexical';
 import { getExtensionDependencyFromEditor } from '@lexical/extension';
 
 /**
@@ -7,12 +13,27 @@ import { getExtensionDependencyFromEditor } from '@lexical/extension';
  */
 export type SchemaMap = Readonly<Record<string, number>>;
 
+/**
+ * Upgrades a document from one Schema Version of an Extension to the next. It receives the
+ * serialized root node in the previous version's format and returns it in the next version's
+ * format. It must be a pure function: it never mutates its input, and it can change any node in
+ * the document, including node types that other Extensions define.
+ */
+export type Migration = (root: SerializedRootNode) => SerializedRootNode;
+
 /** Declares the Schema Version of the node types that one Extension defines. */
 export interface SchemaDeclaration {
 	/** The key of the Extension in a schema map, such as `core` or `acme/kanban`. */
 	readonly name: string;
 	/** The current Schema Version. A positive integer. */
 	readonly version: number;
+	/**
+	 * The Migration for every version bump, keyed by the version it produces: `migrations[2]`
+	 * upgrades version 1 to version 2. Every version from 2 up to `version` needs one.
+	 *
+	 * @defaultValue `{}`
+	 */
+	readonly migrations?: Readonly<Record<number, Migration>>;
 }
 
 /** Configuration of {@link SchemaExtension}. */
@@ -25,6 +46,8 @@ export interface SchemaConfig {
 export interface SchemaOutput {
 	/** The Schema Version of every enabled Extension that defines node types. */
 	readonly versions: SchemaMap;
+	/** Every declaration, in dependency order. Pending Migrations run in this order. */
+	readonly declarations: readonly SchemaDeclaration[];
 }
 
 /**
@@ -41,7 +64,7 @@ export const SchemaExtension = defineExtension({
 		// A Map, because a schema name such as "constructor" would collide with an object's
 		// inherited properties.
 		const versions = new Map<string, number>();
-		for (const { name, version } of schemas) {
+		for (const { name, version, migrations } of schemas) {
 			if (!Number.isSafeInteger(version) || version < 1) {
 				throw new RangeError(
 					`Schema "${name}" has version ${version}, which is not a positive integer.`
@@ -50,9 +73,14 @@ export const SchemaExtension = defineExtension({
 			if (versions.has(name)) {
 				throw new Error(`Schema "${name}" is declared more than once.`);
 			}
+			for (let target = 2; target <= version; target += 1) {
+				if (migrations?.[target] === undefined) {
+					throw new Error(`Schema "${name}" has no Migration to version ${target}.`);
+				}
+			}
 			versions.set(name, version);
 		}
-		return { versions: Object.fromEntries(versions) };
+		return { versions: Object.fromEntries(versions), declarations: schemas };
 	}
 });
 
@@ -73,16 +101,24 @@ export function declareSchema(declaration: SchemaDeclaration) {
 	return configExtension(SchemaExtension, { schemas: [declaration] });
 }
 
-/** Reads the schema map of an editor built with {@link SchemaExtension}. */
-export function schemaVersionsOf(editor: LexicalEditor): SchemaMap {
-	return getExtensionDependencyFromEditor(editor, SchemaExtension).output.versions;
+/** Reads the Schema Versions and declarations of an editor built with {@link SchemaExtension}. */
+export function schemaOf(editor: LexicalEditor): SchemaOutput {
+	return getExtensionDependencyFromEditor(editor, SchemaExtension).output;
+}
+
+/**
+ * The base class of the errors that mean a document needs newer code than the app runs. An
+ * Editor that meets one opens the document read-only.
+ */
+export class UpgradeRequiredError extends Error {
+	override readonly name: string = 'UpgradeRequiredError';
 }
 
 /**
  * Thrown when a Snapshot uses a newer Schema Version of an Extension than the running code
  * supports. blokki never downgrades a document.
  */
-export class NewerSchemaVersionError extends Error {
+export class NewerSchemaVersionError extends UpgradeRequiredError {
 	override readonly name = 'NewerSchemaVersionError';
 	/** The schema name of the Extension, such as `core`. */
 	readonly schema: string;

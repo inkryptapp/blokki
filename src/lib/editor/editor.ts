@@ -12,8 +12,11 @@ import {
 	createHeadlessEditor,
 	exportSnapshot,
 	importSnapshot,
-	type Snapshot
+	NewerSchemaVersionError,
+	type Snapshot,
+	type UpgradeRequiredError
 } from '../core/index.js';
+import { loadRoot } from '../core/snapshot.js';
 import { usesSharedDocument } from '../core/shared-document.js';
 
 /** Options for {@link createEditor}. */
@@ -30,6 +33,12 @@ export interface EditorOptions {
 	 * collaboration is on, the Shared Document provides the content and this option is ignored.
 	 */
 	readonly content?: Snapshot;
+	/**
+	 * Called when the document needs newer code than the app runs, for example because the
+	 * `content` Snapshot uses a newer Schema Version of an Extension. The Editor shows the
+	 * document read-only from then on, and it never downgrades it. Called at most once.
+	 */
+	readonly onUpgradeRequired?: (error: UpgradeRequiredError) => void;
 }
 
 /**
@@ -55,6 +64,12 @@ export interface Editor {
 	 * Document.
 	 */
 	getSnapshot(): Snapshot;
+
+	/**
+	 * Why the document needs newer code than the app runs, or `null`. While it is set, the Editor
+	 * is read-only, and {@link Editor.getSnapshot} returns the document unchanged.
+	 */
+	readonly upgradeRequired: UpgradeRequiredError | null;
 }
 
 /** Keeps the root's `contenteditable` attribute in step with Lexical's editable state. */
@@ -80,13 +95,24 @@ class EditorController implements Editor {
 	#lexical: LexicalEditorWithDispose | null = null;
 	/** The content the next mount loads. It is updated from the Lexical editor on unmount. */
 	#content: Snapshot | undefined;
+	readonly #onUpgradeRequired: ((error: UpgradeRequiredError) => void) | undefined;
+	#upgradeRequired: UpgradeRequiredError | null = null;
 
-	constructor({ extensions = [], content }: EditorOptions) {
+	constructor({ extensions = [], content, onUpgradeRequired }: EditorOptions) {
 		this.#extensions = [...extensions];
 		this.#content = content;
+		this.#onUpgradeRequired = onUpgradeRequired;
+	}
+
+	get upgradeRequired(): UpgradeRequiredError | null {
+		return this.#upgradeRequired;
 	}
 
 	getSnapshot(): Snapshot {
+		// Exporting a newer document would label it with this code's older Schema Versions.
+		if (this.#upgradeRequired !== null && this.#content !== undefined) {
+			return this.#content;
+		}
 		if (this.#lexical !== null) {
 			return exportSnapshot(this.#lexical);
 		}
@@ -95,7 +121,14 @@ class EditorController implements Editor {
 		const headless = createHeadlessEditor({ extensions: this.#extensions });
 		try {
 			if (this.#content !== undefined && !usesSharedDocument(headless)) {
-				importSnapshot(headless, this.#content);
+				try {
+					importSnapshot(headless, this.#content);
+				} catch (error) {
+					if (error instanceof NewerSchemaVersionError) {
+						return this.#content;
+					}
+					throw error;
+				}
 			}
 			return exportSnapshot(headless);
 		} finally {
@@ -108,6 +141,34 @@ class EditorController implements Editor {
 			throw new Error('The Editor is not mounted. Show it with EditorContent first.');
 		}
 		return this.#lexical;
+	}
+
+	/**
+	 * Imports `content`. A newer document is reported first, then shown read-only as far as this
+	 * code can parse it. When it cannot parse the document at all, the Editor stays empty.
+	 */
+	#load(lexical: LexicalEditor, content: Snapshot): void {
+		try {
+			importSnapshot(lexical, content);
+		} catch (error) {
+			if (!(error instanceof NewerSchemaVersionError)) {
+				throw error;
+			}
+			lexical.setEditable(false);
+			this.#requireUpgrade(error);
+			try {
+				loadRoot(lexical, content.root);
+			} catch {
+				// The upgrade is already reported, and getSnapshot() keeps returning the document.
+			}
+		}
+	}
+
+	#requireUpgrade(error: UpgradeRequiredError): void {
+		if (this.#upgradeRequired === null) {
+			this.#upgradeRequired = error;
+			this.#onUpgradeRequired?.(error);
+		}
 	}
 
 	mount(root: HTMLElement): () => void {
@@ -124,7 +185,7 @@ class EditorController implements Editor {
 		);
 		if (this.#content !== undefined && !usesSharedDocument(lexical)) {
 			try {
-				importSnapshot(lexical, this.#content);
+				this.#load(lexical, this.#content);
 			} catch (error) {
 				lexical.dispose();
 				throw error;
@@ -133,7 +194,9 @@ class EditorController implements Editor {
 		lexical.setRootElement(root);
 		this.#lexical = lexical;
 		return () => {
-			this.#content = exportSnapshot(lexical);
+			if (this.#upgradeRequired === null) {
+				this.#content = exportSnapshot(lexical);
+			}
 			this.#lexical = null;
 			lexical.dispose();
 		};

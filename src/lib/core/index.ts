@@ -9,6 +9,8 @@ export {
 	declareSchema,
 	NewerSchemaVersionError,
 	SchemaExtension,
+	UpgradeRequiredError,
+	type Migration,
 	type SchemaConfig,
 	type SchemaDeclaration,
 	type SchemaMap,

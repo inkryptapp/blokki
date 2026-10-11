@@ -33,7 +33,13 @@ describe('Snapshot round trip', () => {
 	it('records the Schema Version of every Extension that declares one, in key order', () => {
 		const Kanban = defineExtension({
 			name: 'acme/kanban',
-			dependencies: [declareSchema({ name: 'acme/kanban', version: 3 })]
+			dependencies: [
+				declareSchema({
+					name: 'acme/kanban',
+					version: 3,
+					migrations: { 2: (root) => root, 3: (root) => root }
+				})
+			]
 		});
 		const editor = createHeadlessEditor({ extensions: [Kanban] });
 
@@ -105,7 +111,7 @@ describe('declareSchema', () => {
 			name: 'test/odd-names',
 			dependencies: [
 				declareSchema({ name: 'constructor', version: 1 }),
-				declareSchema({ name: 'toString', version: 2 })
+				declareSchema({ name: 'toString', version: 2, migrations: { 2: (root) => root } })
 			]
 		});
 
