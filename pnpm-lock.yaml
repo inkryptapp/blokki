@@ -181,6 +181,9 @@ importers:
       '@lexical/rich-text':
         specifier: ~0.52.0
         version: 0.52.0(typescript@6.0.3)
+      '@lexical/selection':
+        specifier: ~0.52.0
+        version: 0.52.0(typescript@6.0.3)
       '@lexical/yjs':
         specifier: ~0.52.0
         version: 0.52.0(typescript@6.0.3)(yjs@13.6.33)

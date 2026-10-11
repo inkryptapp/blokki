@@ -1,15 +1,22 @@
 import {
+	$createParagraphNode,
 	$getNodeByKey,
 	$getRoot,
+	$getSelection,
 	$getState,
+	$isElementNode,
+	$isRangeSelection,
 	$isRootNode,
 	$setState,
+	COMMAND_PRIORITY_LOW,
 	createState,
 	defineExtension,
 	HISTORY_MERGE_TAG,
+	INSERT_PARAGRAPH_COMMAND,
 	mergeRegister,
 	RootNode,
 	safeCast,
+	SELECTION_INSERT_CLIPBOARD_NODES_COMMAND,
 	type ElementNode,
 	type Klass,
 	type LexicalEditor,
@@ -43,7 +50,9 @@ export function createBlockId(): string {
  * and syncs through Yjs. A node without one holds the empty string.
  */
 const blockIdState = createState('blockId', {
-	parse: (value) => (typeof value === 'string' && BLOCK_ID.test(value) ? value : '')
+	parse: (value) => (typeof value === 'string' && BLOCK_ID.test(value) ? value : ''),
+	// A copy, such as a duplicated Block or the right half of a split, is a new Block.
+	resetOnCopyNode: true
 });
 
 /** Returns the Block ID of `node`, or null when it has none. */
@@ -95,10 +104,68 @@ export const BlockIdExtension = defineExtension({
 				return repeated;
 			});
 		};
+		/**
+		 * The Blocks that the current update removed, by their index among the root's children in
+		 * the committed state, with the keys of their children.
+		 */
+		const $removedBlocks = (): Map<number, { id: string; children: string[] }> => {
+			const previous = editor.getEditorState().read(() =>
+				$getRoot()
+					.getChildren()
+					.map((node, index) => ({
+						index,
+						key: node.getKey(),
+						id: $getState(node, blockIdState),
+						children: $isElementNode(node) ? node.getChildrenKeys() : []
+					}))
+			);
+			const removed = new Map<number, { id: string; children: string[] }>();
+			for (const { index, key, id, children } of previous) {
+				// A removed node stays in the node map, detached, until the update commits.
+				if (id !== '' && $getNodeByKey(key)?.isAttached() !== true) {
+					removed.set(index, { id, children });
+				}
+			}
+			return removed;
+		};
+		/**
+		 * Whether `block` replaced a removed Block. Lexical's replace() puts the new node at the old
+		 * node's index and moves the old node's children into it, which is how Turn Into and
+		 * Markdown shortcuts change a Block's type. A Block that only fills the place of a deleted
+		 * one holds none of its children.
+		 */
+		const $replaced = (block: ElementNode, previousChildren: readonly string[]): boolean => {
+			const children = block.getChildrenKeys();
+			return children.length === 0
+				? previousChildren.length === 0
+				: children.some((key) => previousChildren.includes(key));
+		};
+		/**
+		 * Gives each Block without an ID the ID of the Block that it replaced, or a new one, and
+		 * gives a new ID to each Block that repeats an earlier one.
+		 */
 		const $repair = (): void => {
+			// Indices among all of the root's children, the same as in $removedBlocks.
+			const blocks = $getRoot()
+				.getChildren()
+				.flatMap((node, index): [number, ElementNode][] => (isBlock(node) ? [[index, node]] : []));
+			const present = new Set(blocks.map(([, block]) => $getState(block, blockIdState)));
 			const seen = new Set<string>();
-			for (const block of $blocks()) {
+			let removed: Map<number, { id: string; children: string[] }> | null = null;
+			for (const [index, block] of blocks) {
 				let id = $getState(block, blockIdState);
+				if (id === '') {
+					removed ??= $removedBlocks();
+					const previous = removed.get(index);
+					if (
+						previous !== undefined &&
+						!present.has(previous.id) &&
+						$replaced(block, previous.children)
+					) {
+						id = previous.id;
+						present.add(id);
+					}
+				}
 				while (id === '' || seen.has(id)) {
 					id = createId();
 				}
@@ -108,16 +175,65 @@ export const BlockIdExtension = defineExtension({
 				seen.add(id);
 			}
 		};
+		/** The Block that contains `node`, or null. */
+		const $blockOf = (node: LexicalNode): ElementNode | null => {
+			const top = $isRootNode(node) ? null : node.getTopLevelElement();
+			return isBlock(top) ? top : null;
+		};
 
 		return mergeRegister(
-			...blockTypes.map((type) =>
-				editor.registerNodeTransform(type, (node) => {
-					if (isBlock(node) && $getState(node, blockIdState) === '') {
-						$setState(node, blockIdState, createId());
-					}
-				})
-			),
+			// Lexical marks the root dirty whenever a Block is added, so this runs in the update that
+			// creates the Block.
 			editor.registerNodeTransform(RootNode, $repair),
+			// Enter at the very start of a non-empty Block: Lexical would keep the node above and move
+			// the content into a new node below. Adding the empty Block above instead keeps the
+			// Block ID on the content.
+			editor.registerCommand(
+				INSERT_PARAGRAPH_COMMAND,
+				() => {
+					const selection = $getSelection();
+					if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+						return false;
+					}
+					const { anchor } = selection;
+					const anchorNode = anchor.getNode();
+					const block = $blockOf(anchorNode);
+					const atStart =
+						anchor.offset === 0 &&
+						block !== null &&
+						(anchorNode.is(block) || anchorNode.is(block.getFirstDescendant()));
+					if (block === null || !atStart || block.isEmpty()) {
+						return false;
+					}
+					const above = $createParagraphNode();
+					above.setFormat(block.getFormatType());
+					above.setIndent(block.getIndent());
+					block.insertBefore(above);
+					return true;
+				},
+				COMMAND_PRIORITY_LOW
+			),
+			// A pasted Block keeps its ID only if no Block in the document has it, so cut and paste
+			// keeps Anchor Links working and copy and paste creates new IDs. Every pasted Block gets
+			// its ID here, so that it never takes over the ID of a Block that the paste replaces.
+			editor.registerCommand(
+				SELECTION_INSERT_CLIPBOARD_NODES_COMMAND,
+				({ nodes }) => {
+					const present = new Set($blocks().map((block) => $getState(block, blockIdState)));
+					for (const node of nodes) {
+						if ($isElementNode(node) && blockTypes.some((type) => node instanceof type)) {
+							let id = $getState(node, blockIdState);
+							while (id === '' || present.has(id)) {
+								id = createId();
+							}
+							$setState(node, blockIdState, id);
+							present.add(id);
+						}
+					}
+					return false;
+				},
+				COMMAND_PRIORITY_LOW
+			),
 			// Renders each Block ID as a data-block-id attribute, never as a DOM id, which could
 			// collide with the app's own ids or with a second Editor that shows the same document.
 			...blockTypes.map((type) =>

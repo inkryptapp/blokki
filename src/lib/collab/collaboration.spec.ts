@@ -257,6 +257,28 @@ describe('undo with collaboration', () => {
 		network.destroy();
 	});
 
+	it('restores the Block ID of a deleted Block', () => {
+		const network = new Network(10);
+		const doc = new Y.Doc();
+		seedSharedDocument(doc, paragraphs);
+		const { editor } = joinHeadless(network, doc, 'Ada');
+		const idsOf = () => editor.read(() => $getRoot().getChildren().map($getBlockId));
+		const before = idsOf();
+
+		editor.update(
+			() => {
+				$getRoot().getChildAtIndex(1)?.remove();
+			},
+			{ discrete: true }
+		);
+		expect(idsOf()).not.toContain(before[1]);
+		editor.dispatchCommand(UNDO_COMMAND, undefined);
+
+		expect(idsOf()).toEqual(before);
+		editor.dispose();
+		network.destroy();
+	});
+
 	it('cannot be combined with the History Extension', () => {
 		const doc = new Y.Doc();
 		const network = new Network(6);
