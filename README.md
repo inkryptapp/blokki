@@ -2,7 +2,7 @@
 
 A Svelte 5 library for block-based rich-text editing, built on [Lexical](https://lexical.dev), with optional real-time collaboration.
 
-blokki is in early development. Nothing is published to npm yet.
+blokki is in early development. Nothing is published to npm yet. The docs are at [inkryptapp.github.io/blokki](https://inkryptapp.github.io/blokki/).
 
 ## Package entry points
 

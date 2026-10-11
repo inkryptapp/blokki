@@ -1,4 +1,3 @@
-import { $createHeadingNode } from '@lexical/rich-text';
 import { $setBlocksType } from '@lexical/selection';
 import {
 	$copyNode,
@@ -10,7 +9,8 @@ import {
 	$setSelection,
 	COPY_COMMAND,
 	CUT_COMMAND,
-	PASTE_COMMAND
+	PASTE_COMMAND,
+	type ElementNode
 } from 'lexical';
 import type { Editor } from '../lib/index.js';
 
@@ -96,11 +96,11 @@ export function selectBlocks(editor: Editor, first: number, last: number): void 
 	);
 }
 
-/** Turns the Blocks in the selection into headings with `$setBlocksType`, as Turn Into does. */
-export function turnIntoHeading(editor: Editor): void {
+/** Turns the Blocks in the selection into nodes from `create` with `$setBlocksType`, as Turn Into does. */
+export function turnInto(editor: Editor, create: () => ElementNode): void {
 	editor.lexical.update(
 		() => {
-			$setBlocksType($getSelection(), () => $createHeadingNode('h2'));
+			$setBlocksType($getSelection(), create);
 		},
 		{ discrete: true }
 	);

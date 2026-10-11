@@ -1,5 +1,4 @@
 import { HistoryExtension } from '@lexical/history';
-import { HeadingNode } from '@lexical/rich-text';
 import { configExtension, UNDO_COMMAND } from 'lexical';
 import { describe, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -15,8 +14,9 @@ import {
 	placeCaretAtStart,
 	selectBlocks,
 	selectText,
-	turnIntoHeading
+	turnInto
 } from '../../test-utils/editor.js';
+import { NoteNode, noteExtension } from '../../test-utils/note.js';
 import { BlockIdExtension, parseSnapshot } from '../core/index.js';
 import { createEditor, EditorContent, type Editor, type EditorOptions } from '../index.js';
 
@@ -46,6 +46,12 @@ async function mountEditor(options: EditorOptions = {}): Promise<Editor> {
 	await page.getByRole('textbox', { name: 'Document' }).click();
 	return editor;
 }
+
+/** A second Block type that the tests define, for Turn Into. */
+const noteBlocks = [
+	noteExtension(3),
+	configExtension(BlockIdExtension, { blockTypes: [NoteNode] })
+];
 
 function expectNewId(block: Block | undefined, ...taken: unknown[]): void {
 	expect(block?.id).toMatch(BLOCK_ID);
@@ -131,37 +137,32 @@ describe('Block ID rules', () => {
 	});
 
 	it('4. Turning a Block into another type keeps its ID', async () => {
-		const editor = await mountEditor({
-			extensions: [configExtension(BlockIdExtension, { blockTypes: [HeadingNode] })]
-		});
+		const editor = await mountEditor({ extensions: noteBlocks });
 		placeCaretAtEnd(editor, 1);
 
-		turnIntoHeading(editor);
+		turnInto(editor, () => new NoteNode());
 
 		const blocks = blocksOf(editor);
-		expect(blocks[1]).toMatchObject({ id: second, type: 'heading' });
+		expect(blocks[1]).toMatchObject({ id: second, type: 'acme-note' });
 		expect(blocks.map(({ id }) => id)).toEqual([first, second, empty, last]);
 	});
 
 	it('4. Turning several Blocks into another type keeps each ID, next to other root nodes', async () => {
 		const content = parseSnapshot(unsupported);
-		const editor = createEditor({
-			content,
-			extensions: [configExtension(BlockIdExtension, { blockTypes: [HeadingNode] })]
-		});
+		const editor = createEditor({ content, extensions: noteBlocks });
 		await render(EditorContent, { editor, 'aria-label': 'Document' });
 		await page.getByRole('textbox', { name: 'Document' }).click();
 		const ids = content.root.children.map((node) => node.$?.['blockId']);
 		selectBlocks(editor, 2, 3);
 
-		turnIntoHeading(editor);
+		turnInto(editor, () => new NoteNode());
 
 		const blocks = blocksOf(editor);
 		expect(blocks.map(({ type }) => type)).toEqual([
 			'paragraph',
 			'acme-kanban',
-			'heading',
-			'heading'
+			'acme-note',
+			'acme-note'
 		]);
 		expect(blocks.map(({ id }) => id)).toEqual(ids);
 	});
