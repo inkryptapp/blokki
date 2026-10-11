@@ -12,3 +12,4 @@ export {
 	type CollaborationOutput,
 	type CollaborationUser
 } from './collaboration.js';
+export { seedSharedDocument, type SeedOptions } from './seed.js';

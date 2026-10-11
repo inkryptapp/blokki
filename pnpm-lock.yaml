@@ -175,6 +175,9 @@ importers:
       '@lexical/extension':
         specifier: ~0.52.0
         version: 0.52.0(typescript@6.0.3)
+      '@lexical/history':
+        specifier: ~0.52.0
+        version: 0.52.0(typescript@6.0.3)
       '@lexical/rich-text':
         specifier: ~0.52.0
         version: 0.52.0(typescript@6.0.3)
@@ -557,6 +560,14 @@ packages:
 
   '@lexical/extension@0.52.0':
     resolution: {integrity: sha512-do7uvUxg6mJK0702XlD0Z8UMCtr1Yij4/WpJ7+GY5CL2jKVercMeeYBBEE7cWc/OXQJgzVx3ClNXC7XAHI6Fvw==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+  '@lexical/history@0.52.0':
+    resolution: {integrity: sha512-UJWmTcru+4KWkk8YtBSQ4dNLYuOJVCyCMFGsaCp/jVJEobwdY//jCTj9idOfE4b3H39kAixe9yQG/FNNOj4ujg==}
     peerDependencies:
       typescript: '>=5.2'
     peerDependenciesMeta:
@@ -2339,6 +2350,14 @@ snapshots:
       '@lexical/internal': 0.52.0(typescript@6.0.3)
       '@lexical/utils': 0.52.0(typescript@6.0.3)
       '@preact/signals-core': 1.14.4
+      lexical: 0.52.0(typescript@6.0.3)
+    optionalDependencies:
+      typescript: 6.0.3
+
+  '@lexical/history@0.52.0(typescript@6.0.3)':
+    dependencies:
+      '@lexical/extension': 0.52.0(typescript@6.0.3)
+      '@lexical/utils': 0.52.0(typescript@6.0.3)
       lexical: 0.52.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3

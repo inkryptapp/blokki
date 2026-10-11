@@ -110,6 +110,12 @@ export class TestProvider implements Provider {
 		this.#listeners.get(type)?.delete(listener);
 	}
 
+	/** Number of awareness listeners other than the provider's own. */
+	awarenessListenerCount(): number {
+		// lib0's Observable keeps its listeners in _observers, and the provider registers one.
+		return (this.awareness._observers.get('update')?.size ?? 0) - 1;
+	}
+
 	/** Number of listeners that are still registered on this provider. */
 	listenerCount(): number {
 		let count = 0;
@@ -233,7 +239,8 @@ export class Network {
 			return false;
 		}
 		this.#queue = this.#queue.filter((queued) => queued !== message);
-		if (this.#canReach(message.from, message.to)) {
+		// A message already on the wire arrives even if its sender has disconnected since.
+		if (message.to.connected && this.#sameGroup(message.from, message.to)) {
 			message.to.receive(message);
 		}
 		return true;
@@ -280,9 +287,10 @@ export class Network {
 	}
 
 	#canReach(from: TestProvider, to: TestProvider): boolean {
-		if (!from.connected || !to.connected) {
-			return false;
-		}
+		return from.connected && to.connected && this.#sameGroup(from, to);
+	}
+
+	#sameGroup(from: TestProvider, to: TestProvider): boolean {
 		return this.#groups === null || this.#groups.get(from) === this.#groups.get(to);
 	}
 }

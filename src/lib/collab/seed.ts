@@ -36,9 +36,22 @@ const OFFLINE_PROVIDER: Provider = {
 };
 
 /**
- * Writes a Snapshot into an empty Shared Document, in one Yjs transaction.
+ * Gives a new Shared Document its initial content from a Snapshot. The client that creates the
+ * document calls it once, before anyone else joins. Editors never seed on connect, because two
+ * clients that connect to an empty document at the same time would both seed it, and the content
+ * would appear twice.
+ *
+ * Seeding runs headless, so it also works in Node. It is not an undo step for any Editor.
  *
  * @throws Error when the Shared Document already has content.
+ * @throws The errors of `importSnapshot` when the Snapshot cannot be loaded.
+ *
+ * @example
+ * ```ts
+ * const doc = new Y.Doc();
+ * seedSharedDocument(doc, snapshot, { extensions });
+ * // Then connect the provider and mount the Editor.
+ * ```
  */
 export function seedSharedDocument(doc: Doc, snapshot: Snapshot, options: SeedOptions = {}): void {
 	const editor = buildEditorFromExtensions(
