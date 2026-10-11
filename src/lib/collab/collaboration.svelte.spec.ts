@@ -8,7 +8,12 @@ import { Network, type TestProvider } from '../../test-utils/collab/network.js';
 import { placeCaretAtEnd } from '../../test-utils/editor.js';
 import { trackResources } from '../../test-utils/resources.js';
 import paragraphs from '../../test-fixtures/snapshots/paragraphs.json';
-import { parseSnapshot } from '../core/index.js';
+import {
+	NewerSchemaVersionError,
+	parseSnapshot,
+	type UpgradeRequiredError
+} from '../core/index.js';
+import { noteExtension } from '../../test-utils/note.js';
 import { createEditor, EditorContent, type Editor } from '../index.js';
 import { collaboration, seedSharedDocument } from './index.js';
 
@@ -277,5 +282,51 @@ describe('collaboration', () => {
 		expect(provider.awareness.getLocalState()).toBeNull();
 		expect(observer.awareness.getStates().has(doc.clientID)).toBe(false);
 		target.remove();
+	});
+
+	it('switches a mounted older Editor to read-only when a newer one writes', async () => {
+		network = new Network(10);
+		const seeded = new Y.Doc();
+		seedSharedDocument(seeded, parseSnapshot(paragraphs), { extensions: [noteExtension(2)] });
+		const olderProvider = network.join(seeded);
+		const newerProvider = network.join(new Y.Doc());
+		const reports: UpgradeRequiredError[] = [];
+		const older = createEditor({
+			extensions: [
+				noteExtension(2),
+				collaboration({ doc: seeded, provider: olderProvider, user: { id: 'old', name: 'Old' } })
+			],
+			onUpgradeRequired: (error) => reports.push(error)
+		});
+		const newer = createEditor({
+			extensions: [
+				noteExtension(3),
+				collaboration({
+					doc: newerProvider.doc,
+					provider: newerProvider,
+					user: { id: 'new', name: 'New' }
+				})
+			]
+		});
+		await render(EditorContent, { editor: older, 'aria-label': 'Older' });
+		await render(EditorContent, { editor: newer, 'aria-label': 'Newer' });
+		network.run();
+		const olderBox = page.getByRole('textbox', { name: 'Older' });
+		await expect.element(olderBox).toHaveAttribute('contenteditable', 'true');
+
+		await page.getByRole('textbox', { name: 'Newer' }).click();
+		placeCaretAtEnd(newer, 0);
+		await userEvent.keyboard(' newer');
+		await expect
+			.element(page.getByRole('textbox', { name: 'Newer' }))
+			.toHaveTextContent('The first paragraph. newer');
+		network.run();
+
+		await expect.element(olderBox).toHaveAttribute('contenteditable', 'false');
+		await expect.element(olderBox).toHaveTextContent('The first paragraph. newer');
+		expect(reports).toHaveLength(1);
+		expect(reports[0]).toBeInstanceOf(NewerSchemaVersionError);
+		expect(older.upgradeRequired).toBe(reports[0]);
+		expect(() => older.getSnapshot()).toThrow(NewerSchemaVersionError);
 	});
 });

@@ -7,6 +7,7 @@
 export { CoreExtension, createHeadlessEditor, type HeadlessEditorOptions } from './headless.js';
 export {
 	declareSchema,
+	MissingExtensionError,
 	NewerSchemaVersionError,
 	SchemaExtension,
 	UpgradeRequiredError,

@@ -136,3 +136,23 @@ export class NewerSchemaVersionError extends UpgradeRequiredError {
 		this.supportedVersion = supportedVersion;
 	}
 }
+
+/**
+ * Reported when a Shared Document uses an Extension that the app does not enable. The client
+ * cannot represent those nodes, so it opens the document read-only.
+ */
+export class MissingExtensionError extends UpgradeRequiredError {
+	override readonly name = 'MissingExtensionError';
+	/** The schema name of the missing Extension. */
+	readonly schema: string;
+	/** The Schema Version that the document records for it. */
+	readonly documentVersion: number;
+
+	constructor(schema: string, documentVersion: number) {
+		super(
+			`The document uses version ${documentVersion} of the "${schema}" schema, but this app does not enable its Extension.`
+		);
+		this.schema = schema;
+		this.documentVersion = documentVersion;
+	}
+}

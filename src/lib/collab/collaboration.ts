@@ -41,7 +41,9 @@ import {
 	type XmlText,
 	type YEvent
 } from 'yjs';
-import { SharedDocumentExtension } from '../core/shared-document.js';
+import { schemaOf } from '../core/schema.js';
+import { SharedDocumentExtension, sharedDocumentOf } from '../core/shared-document.js';
+import { checkSchema, raiseSchema, schemaMetadataOf } from './schema-metadata.js';
 
 /** The user who edits through this Editor, as other collaborators see them. */
 export interface CollaborationUser {
@@ -300,6 +302,23 @@ export const CollaborationExtension = defineExtension({
 		const { provider } = options;
 		const { binding, undoManager } = state.getOutput();
 		const contentOnly = withoutPresence(provider);
+		const metadata = schemaMetadataOf(options.doc);
+		const { versions } = schemaOf(editor);
+		const { upgradeRequired } = sharedDocumentOf(editor);
+		/**
+		 * Compares the schema metadata with this client's Extensions. A client that cannot represent
+		 * the document becomes read-only for good, and it never writes to the Shared Document again.
+		 */
+		const updateSchemaStatus = (): boolean => {
+			if (upgradeRequired.value === null) {
+				const reason = checkSchema(metadata, versions);
+				if (reason !== null) {
+					editor.setEditable(false);
+					upgradeRequired.value = reason;
+				}
+			}
+			return upgradeRequired.value === null;
+		};
 		const onUndoStackChange = (): void => {
 			editor.dispatchCommand(CAN_UNDO_COMMAND, undoManager.undoStack.length > 0);
 			editor.dispatchCommand(CAN_REDO_COMMAND, undoManager.redoStack.length > 0);
@@ -309,7 +328,12 @@ export const CollaborationExtension = defineExtension({
 			transaction: Transaction
 		): void => {
 			// The binding is the origin of the transactions that it writes itself.
-			if (transaction.origin !== binding) {
+			if (transaction.origin === binding) {
+				return;
+			}
+			// The metadata that came with these changes decides whether this client can show them.
+			const writable = updateSchemaStatus();
+			try {
 				syncYjsChangesToLexicalV2__EXPERIMENTAL(
 					binding,
 					editor.getRootElement() === null ? contentOnly : provider,
@@ -317,7 +341,16 @@ export const CollaborationExtension = defineExtension({
 					transaction,
 					transaction.origin instanceof UndoManager
 				);
+			} catch (error) {
+				// A read-only client shows what it can. @lexical/yjs throws on node types that this
+				// client lacks.
+				if (writable) {
+					throw error;
+				}
 			}
+		};
+		const onMetadataChange = (): void => {
+			updateSchemaStatus();
 		};
 		const onStatus = ({ status }: { status: string }): void => {
 			editor.dispatchCommand(CONNECTED_COMMAND, status === 'connected');
@@ -328,19 +361,24 @@ export const CollaborationExtension = defineExtension({
 			disconnect = null;
 		};
 
+		updateSchemaStatus();
 		binding.root.observeDeep(onYjsChanges);
+		metadata.observe(onMetadataChange);
 		provider.on('status', onStatus);
 		undoManager.on('stack-item-added', onUndoStackChange);
 		undoManager.on('stack-item-popped', onUndoStackChange);
 		undoManager.on('stack-cleared', onUndoStackChange);
 		return mergeRegister(
 			() => binding.root.unobserveDeep(onYjsChanges),
+			() => metadata.unobserve(onMetadataChange),
 			() => provider.off('status', onStatus),
 			() => undoManager.destroy(),
 			editor.registerCommand(
 				UNDO_COMMAND,
 				() => {
-					undoManager.undo();
+					if (upgradeRequired.value === null) {
+						undoManager.undo();
+					}
 					return true;
 				},
 				COMMAND_PRIORITY_EDITOR
@@ -348,7 +386,9 @@ export const CollaborationExtension = defineExtension({
 			editor.registerCommand(
 				REDO_COMMAND,
 				() => {
-					undoManager.redo();
+					if (upgradeRequired.value === null) {
+						undoManager.redo();
+					}
 					return true;
 				},
 				COMMAND_PRIORITY_EDITOR
@@ -369,7 +409,7 @@ export const CollaborationExtension = defineExtension({
 			}),
 			editor.registerUpdateListener(
 				({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
-					if (tags.has(SKIP_COLLAB_TAG)) {
+					if (tags.has(SKIP_COLLAB_TAG) || !updateSchemaStatus()) {
 						return;
 					}
 					// A refill is not a user edit, and capturing it would clear the redo stack. The undo
@@ -377,16 +417,23 @@ export const CollaborationExtension = defineExtension({
 					const refill = isRefill(prevEditorState, editorState, tags);
 					binding.isBootstrapping ||= refill;
 					try {
-						syncLexicalUpdateToYjsV2__EXPERIMENTAL(
-							binding,
-							provider,
-							prevEditorState,
-							editorState,
-							dirtyElements,
-							dirtyLeaves,
-							normalizedNodes,
-							tags
-						);
+						options.doc.transact((transaction) => {
+							syncLexicalUpdateToYjsV2__EXPERIMENTAL(
+								binding,
+								provider,
+								prevEditorState,
+								editorState,
+								dirtyElements,
+								dirtyLeaves,
+								normalizedNodes,
+								tags
+							);
+							// When the document now holds data that this client's code wrote, it records its
+							// Schema Versions in the same transaction, so that no peer reads the data first.
+							if (transaction.changed.size > 0 || transaction.deleteSet.clients.size > 0) {
+								raiseSchema(metadata, versions, binding);
+							}
+						}, binding);
 					} finally {
 						if (refill) {
 							binding.isBootstrapping = false;
@@ -417,16 +464,23 @@ export const CollaborationExtension = defineExtension({
 			stopConnection
 		);
 	},
-	afterRegistration: (_editor, config, state) => {
+	afterRegistration: (editor, config, state) => {
 		const { binding } = state.getOutput();
 		// Shows content that the Shared Document already holds. An empty Shared Document is left
 		// alone, because Lexical fills an empty root with a paragraph that would seed it.
 		// The root element is attached later, so this load syncs content only.
 		if (binding.root.length > 0) {
-			syncYjsStateToLexicalV2__EXPERIMENTAL(
-				binding,
-				withoutPresence(requireOptions(config).provider)
-			);
+			try {
+				syncYjsStateToLexicalV2__EXPERIMENTAL(
+					binding,
+					withoutPresence(requireOptions(config).provider)
+				);
+			} catch (error) {
+				// A client that cannot represent the document shows what it can.
+				if (sharedDocumentOf(editor).upgradeRequired.value === null) {
+					throw error;
+				}
+			}
 		}
 		return () => {};
 	}

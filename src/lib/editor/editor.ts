@@ -17,7 +17,7 @@ import {
 	type UpgradeRequiredError
 } from '../core/index.js';
 import { loadRoot } from '../core/snapshot.js';
-import { usesSharedDocument } from '../core/shared-document.js';
+import { sharedDocumentOf, usesSharedDocument } from '../core/shared-document.js';
 
 /** Options for {@link createEditor}. */
 export interface EditorOptions {
@@ -34,9 +34,11 @@ export interface EditorOptions {
 	 */
 	readonly content?: Snapshot;
 	/**
-	 * Called when the document needs newer code than the app runs, for example because the
-	 * `content` Snapshot uses a newer Schema Version of an Extension. The Editor shows the
-	 * document read-only from then on, and it never downgrades it. Called at most once.
+	 * Called when the document needs newer code than the app runs: when the `content` Snapshot
+	 * or the Shared Document uses a newer Schema Version of an Extension, or when the Shared
+	 * Document uses an Extension that the app does not enable. The Editor shows the document
+	 * read-only from then on, never downgrades it, and never writes to the Shared Document again.
+	 * Called at most once.
 	 */
 	readonly onUpgradeRequired?: (error: UpgradeRequiredError) => void;
 }
@@ -62,6 +64,9 @@ export interface Editor {
 	 * content that the next mount shows: the `content` option at first, and the last mounted
 	 * state after an unmount. When collaboration is on, the Snapshot is derived from the Shared
 	 * Document.
+	 *
+	 * @throws {@link UpgradeRequiredError} when collaboration is on and the Shared Document needs
+	 * newer code. The Editor cannot represent all of it, so a Snapshot would lose content.
 	 */
 	getSnapshot(): Snapshot;
 
@@ -109,12 +114,8 @@ class EditorController implements Editor {
 	}
 
 	getSnapshot(): Snapshot {
-		// Exporting a newer document would label it with this code's older Schema Versions.
-		if (this.#upgradeRequired !== null && this.#content !== undefined) {
-			return this.#content;
-		}
 		if (this.#lexical !== null) {
-			return exportSnapshot(this.#lexical);
+			return this.#export(this.#lexical);
 		}
 		// Round-trips through a headless editor, so the result has the same form as a mounted
 		// export, including the schema map of the enabled Extensions.
@@ -130,10 +131,24 @@ class EditorController implements Editor {
 					throw error;
 				}
 			}
-			return exportSnapshot(headless);
+			return this.#export(headless);
 		} finally {
 			headless.dispose();
 		}
+	}
+
+	#export(lexical: LexicalEditor): Snapshot {
+		if (usesSharedDocument(lexical)) {
+			// The editor holds only the part of the Shared Document that it can represent.
+			const reason = sharedDocumentOf(lexical).upgradeRequired.value;
+			if (reason !== null) {
+				throw reason;
+			}
+		} else if (this.#upgradeRequired !== null && this.#content !== undefined) {
+			// Exporting a newer document would label it with this code's older Schema Versions.
+			return this.#content;
+		}
+		return exportSnapshot(lexical);
 	}
 
 	get lexical(): LexicalEditor {
@@ -191,9 +206,16 @@ class EditorController implements Editor {
 				throw error;
 			}
 		}
+		const stopWatching = effect(() => {
+			const reason = sharedDocumentOf(lexical).upgradeRequired.value;
+			if (reason !== null) {
+				this.#requireUpgrade(reason);
+			}
+		});
 		lexical.setRootElement(root);
 		this.#lexical = lexical;
 		return () => {
+			stopWatching();
 			if (this.#upgradeRequired === null) {
 				this.#content = exportSnapshot(lexical);
 			}

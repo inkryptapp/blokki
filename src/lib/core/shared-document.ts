@@ -1,10 +1,20 @@
-import { getExtensionDependencyFromEditor } from '@lexical/extension';
+import { getExtensionDependencyFromEditor, signal, type Signal } from '@lexical/extension';
 import { defineExtension, safeCast, type LexicalEditor } from 'lexical';
+import type { UpgradeRequiredError } from './schema.js';
 
 /** Configuration of {@link SharedDocumentExtension}. */
 export interface SharedDocumentConfig {
 	/** Whether a Shared Document provides the editor's content. */
 	readonly enabled: boolean;
+}
+
+/** Output of {@link SharedDocumentExtension}. */
+export interface SharedDocumentOutput {
+	/**
+	 * Set once the Shared Document needs newer code than the app runs. The editor is read-only
+	 * from then on, and it never writes to the Shared Document again.
+	 */
+	readonly upgradeRequired: Signal<UpgradeRequiredError | null>;
 }
 
 /**
@@ -14,10 +24,21 @@ export interface SharedDocumentConfig {
  */
 export const SharedDocumentExtension = defineExtension({
 	name: 'blokki/shared-document',
-	config: safeCast<SharedDocumentConfig>({ enabled: false })
+	config: safeCast<SharedDocumentConfig>({ enabled: false }),
+	build: (): SharedDocumentOutput => ({
+		upgradeRequired: signal<UpgradeRequiredError | null>(null)
+	})
 });
+
+/** The Shared Document state of an editor built with `CoreExtension`. */
+export function sharedDocumentOf(
+	editor: LexicalEditor
+): SharedDocumentConfig & SharedDocumentOutput {
+	const { config, output } = getExtensionDependencyFromEditor(editor, SharedDocumentExtension);
+	return { enabled: config.enabled, upgradeRequired: output.upgradeRequired };
+}
 
 /** Whether a Shared Document provides the content of an editor built with `CoreExtension`. */
 export function usesSharedDocument(editor: LexicalEditor): boolean {
-	return getExtensionDependencyFromEditor(editor, SharedDocumentExtension).config.enabled;
+	return sharedDocumentOf(editor).enabled;
 }

@@ -7,7 +7,9 @@ import {
 import { defineExtension } from 'lexical';
 import type { Doc } from 'yjs';
 import { CoreExtension, importSnapshot, type Snapshot } from '../core/index.js';
+import { schemaOf } from '../core/schema.js';
 import { unsupportedTypesOf } from '../core/unsupported.js';
+import { raiseSchema, schemaMetadataOf } from './schema-metadata.js';
 
 /** Options for {@link seedSharedDocument}. */
 export interface SeedOptions {
@@ -42,7 +44,9 @@ const OFFLINE_PROVIDER: Provider = {
  * clients that connect to an empty document at the same time would both seed it, and the content
  * would appear twice.
  *
- * Seeding runs headless, so it also works in Node. It is not an undo step for any Editor.
+ * Seeding also records the Schema Version of every Extension in `options.extensions` in the
+ * Shared Document's schema metadata. It runs headless, so it also works in Node. It is not an
+ * undo step for any Editor.
  *
  * @throws Error when the Shared Document already has content.
  * @throws The errors of `importSnapshot` when the Snapshot cannot be loaded.
@@ -92,8 +96,12 @@ export function seedSharedDocument(doc: Doc, snapshot: Snapshot, options: SeedOp
 			}
 		);
 		// Imports again, now with the listener. importSnapshot commits synchronously, so the
-		// listener writes the content before dispose.
-		importSnapshot(editor, snapshot);
+		// listener writes the content before dispose. One transaction delivers the content and the
+		// schema map that describes it together.
+		doc.transact(() => {
+			raiseSchema(schemaMetadataOf(doc), schemaOf(editor).versions, 'blokki-seed');
+			importSnapshot(editor, snapshot);
+		}, 'blokki-seed');
 	} finally {
 		editor.dispose();
 	}
