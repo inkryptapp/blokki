@@ -8,8 +8,7 @@ import {
 	importSnapshot,
 	InvalidSnapshotError,
 	NewerSchemaVersionError,
-	parseSnapshot,
-	type Snapshot
+	parseSnapshot
 } from './index.js';
 
 // Each fixture is one line of compact JSON, as JSON.stringify writes it, plus a newline.
@@ -54,13 +53,11 @@ describe('importSnapshot', () => {
 	const paragraphs = parseSnapshot(
 		JSON.parse(readFileSync(new URL('paragraphs.json', fixtures), 'utf8'))
 	);
-	const withUnknownNode: Snapshot = {
+	// A node without a type is malformed JSON that no Extension can read.
+	const withMalformedNode = parseSnapshot({
 		schema: { core: 1 },
-		root: {
-			...paragraphs.root,
-			children: [...paragraphs.root.children, { type: 'acme/unknown', version: 1 }]
-		}
-	};
+		root: { ...paragraphs.root, children: [...paragraphs.root.children, { version: 1 }] }
+	});
 
 	it('rejects a newer Schema Version and keeps the content', () => {
 		const editor = createHeadlessEditor();
@@ -84,7 +81,7 @@ describe('importSnapshot', () => {
 		const editor = createHeadlessEditor();
 		importSnapshot(editor, paragraphs);
 
-		expect(() => importSnapshot(editor, withUnknownNode)).toThrow(InvalidSnapshotError);
+		expect(() => importSnapshot(editor, withMalformedNode)).toThrow(InvalidSnapshotError);
 		expect(exportSnapshot(editor)).toEqual(paragraphs);
 	});
 
@@ -99,7 +96,7 @@ describe('importSnapshot', () => {
 		const editor = createHeadlessEditor({ extensions: [LenientErrors] });
 		importSnapshot(editor, paragraphs);
 
-		expect(() => importSnapshot(editor, withUnknownNode)).toThrow(InvalidSnapshotError);
+		expect(() => importSnapshot(editor, withMalformedNode)).toThrow(InvalidSnapshotError);
 		expect(errors).toHaveLength(1);
 		expect(exportSnapshot(editor)).toEqual(paragraphs);
 	});

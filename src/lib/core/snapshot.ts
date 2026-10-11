@@ -8,6 +8,7 @@ import {
 } from 'lexical';
 import { NewerSchemaVersionError, schemaOf, type SchemaMap } from './schema.js';
 import { usesSharedDocument } from './shared-document.js';
+import { replaceUnknownNodes, restoreUnknownNodes, retainedSchemaOf } from './unsupported.js';
 
 /**
  * The complete content of a document in blokki's portable, versioned format: Lexical's serialized
@@ -79,20 +80,41 @@ export function parseSnapshot(value: unknown): Snapshot {
  * blokki's `CoreExtension`, as {@link createHeadlessEditor} and every Editor are.
  *
  * Before Lexical parses the document, the import runs every pending Migration of each enabled
- * Extension, in order, starting from the version that the Snapshot records. The Snapshot itself
- * stays unchanged. The change is not an undo step. A Snapshot whose root has no children loads
+ * Extension, in order, starting from the version that the Snapshot records. It then replaces
+ * each node whose type the editor does not have with an Unsupported Block, a read-only
+ * placeholder that keeps the node's JSON. An unknown node inside a Block gets an inline
+ * placeholder instead. The Snapshot itself stays unchanged. The change is not an undo step. A Snapshot whose root has no children loads
  * as one empty paragraph. When the import fails, the editor keeps its content.
  *
  * @throws {@link NewerSchemaVersionError} when the Snapshot uses a newer Schema Version of an
  * enabled Extension than the editor supports.
- * @throws {@link InvalidSnapshotError} when Lexical cannot parse the Snapshot, for example
- * because it contains a node type that the editor does not have.
+ * @throws {@link InvalidSnapshotError} when Lexical cannot parse the Snapshot.
  * @throws Error when a Shared Document provides the editor's content. A Shared Document is never
  * rebuilt from a Snapshot. Seed a new Shared Document instead.
  * @throws The error of a Migration that fails.
  */
 export function importSnapshot(editor: LexicalEditor, snapshot: Snapshot): void {
-	loadRoot(editor, migrate(editor, snapshot));
+	const root = migrate(editor, snapshot);
+	const { versions } = schemaOf(editor);
+	const retained = retainedSchemaOf(editor);
+	const previous = new Map(retained);
+	// Update listeners run while the state is set, and they may export, so the schema entries of
+	// disabled Extensions must already be in place.
+	retained.clear();
+	for (const [schema, version] of Object.entries(snapshot.schema)) {
+		if (!Object.hasOwn(versions, schema)) {
+			retained.set(schema, version);
+		}
+	}
+	try {
+		loadRoot(editor, root);
+	} catch (error) {
+		retained.clear();
+		for (const [schema, version] of previous) {
+			retained.set(schema, version);
+		}
+		throw error;
+	}
 }
 
 /**
@@ -102,7 +124,7 @@ export function importSnapshot(editor: LexicalEditor, snapshot: Snapshot): void 
 function migrate(editor: LexicalEditor, snapshot: Snapshot): SerializedRootNode {
 	const { versions, declarations } = schemaOf(editor);
 	for (const [schema, documentVersion] of Object.entries(snapshot.schema)) {
-		const supportedVersion = versions[schema];
+		const supportedVersion = Object.hasOwn(versions, schema) ? versions[schema] : undefined;
 		if (supportedVersion !== undefined && documentVersion > supportedVersion) {
 			throw new NewerSchemaVersionError(schema, documentVersion, supportedVersion);
 		}
@@ -110,7 +132,8 @@ function migrate(editor: LexicalEditor, snapshot: Snapshot): SerializedRootNode 
 	let root = snapshot.root;
 	let copied = false;
 	for (const { name, version, migrations = {} } of declarations) {
-		for (let target = (snapshot.schema[name] ?? version) + 1; target <= version; target += 1) {
+		const recorded = Object.hasOwn(snapshot.schema, name) ? snapshot.schema[name] : undefined;
+		for (let target = (recorded ?? version) + 1; target <= version; target += 1) {
 			const migration = migrations[target];
 			if (migration === undefined) {
 				continue;
@@ -145,7 +168,7 @@ export function loadRoot(editor: LexicalEditor, root: SerializedRootNode): void 
 	let parsed = false;
 	let state: EditorState;
 	try {
-		state = editor.parseEditorState({ root }, () => {
+		state = editor.parseEditorState({ root: replaceUnknownNodes(editor, root) }, () => {
 			const parsedRoot = $getRoot();
 			if (parsedRoot.isEmpty()) {
 				parsedRoot.append($createParagraphNode());
@@ -162,15 +185,16 @@ export function loadRoot(editor: LexicalEditor, root: SerializedRootNode): void 
 }
 
 /**
- * Exports the content of a Lexical editor as a Snapshot, after applying its pending updates. The
- * schema map lists the Schema Version of every enabled Extension that declares one, with keys in
- * sorted order, so the same content always serializes to the same JSON.
+ * Exports the content of a Lexical editor as a Snapshot, after applying its pending updates. Each
+ * Unsupported Block is written back as the JSON it was imported from. The schema map lists the
+ * Schema Version of every enabled Extension that declares one, plus the entries of the last
+ * imported Snapshot whose Extensions are not enabled. Its keys are sorted, so the same content
+ * always serializes to the same JSON.
  */
 export function exportSnapshot(editor: LexicalEditor): Snapshot {
 	// editor.read() commits pending updates before it runs.
 	const { root } = editor.read(() => editor.getEditorState().toJSON());
-	const schema = Object.fromEntries(
-		Object.entries(schemaOf(editor).versions).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-	);
-	return { schema, root };
+	const entries = [...Object.entries(schemaOf(editor).versions), ...retainedSchemaOf(editor)];
+	const schema = Object.fromEntries(entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+	return { schema, root: restoreUnknownNodes(root) };
 }

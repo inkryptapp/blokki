@@ -101,6 +101,21 @@ describe('Seeding', () => {
 		network.destroy();
 	});
 
+	it('refuses a Snapshot with node types that its Extensions do not have', () => {
+		const doc = new Y.Doc();
+		const unsupported = parseSnapshot(
+			JSON.parse(
+				readFileSync(
+					new URL('../../test-fixtures/snapshots/unsupported-nodes.json', import.meta.url),
+					'utf8'
+				)
+			)
+		);
+
+		expect(() => seedSharedDocument(doc, unsupported)).toThrow('acme-kanban');
+		expect(doc.get('root-v2', Y.XmlElement).length).toBe(0);
+	});
+
 	it('refuses a Shared Document that already has content', () => {
 		const doc = new Y.Doc();
 		seedSharedDocument(doc, paragraphs);

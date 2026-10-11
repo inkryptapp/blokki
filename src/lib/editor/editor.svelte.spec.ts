@@ -81,7 +81,8 @@ describe('Editor snapshots', () => {
 		});
 		const content = parseSnapshot({
 			schema: { core: 1 },
-			root: { ...paragraphs.root, children: [{ type: 'acme/unknown', version: 1 }] }
+			// A node without a type is malformed JSON that no Extension can read.
+			root: { ...paragraphs.root, children: [{ version: 1 }] }
 		});
 		const editor = createEditor({ content, extensions: [probe] });
 

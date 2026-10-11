@@ -7,16 +7,19 @@ import { RichTextExtension } from '@lexical/rich-text';
 import { defineExtension } from 'lexical';
 import { declareSchema } from './schema.js';
 import { SharedDocumentExtension } from './shared-document.js';
+import { UnsupportedContentExtension } from './unsupported.js';
 
 /**
  * The node types that every Editor has: root, paragraph, text, line break, tab, heading, and
- * quote. They are recorded as the `core` schema in a Snapshot.
+ * quote. They are recorded as the `core` schema in a Snapshot. It also holds the placeholders
+ * for Unsupported Blocks.
  */
 export const CoreExtension = defineExtension({
 	name: 'blokki/core',
 	dependencies: [
 		RichTextExtension,
 		SharedDocumentExtension,
+		UnsupportedContentExtension,
 		declareSchema({ name: 'core', version: 1 })
 	]
 });

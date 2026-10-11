@@ -23,3 +23,8 @@ export {
 	parseSnapshot,
 	type Snapshot
 } from './snapshot.js';
+export {
+	UnsupportedBlockNode,
+	UnsupportedInlineNode,
+	type SerializedUnsupportedNode
+} from './unsupported.js';

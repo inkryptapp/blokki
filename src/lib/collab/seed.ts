@@ -7,6 +7,7 @@ import {
 import { defineExtension } from 'lexical';
 import type { Doc } from 'yjs';
 import { CoreExtension, importSnapshot, type Snapshot } from '../core/index.js';
+import { unsupportedTypesOf } from '../core/unsupported.js';
 
 /** Options for {@link seedSharedDocument}. */
 export interface SeedOptions {
@@ -67,6 +68,15 @@ export function seedSharedDocument(doc: Doc, snapshot: Snapshot, options: SeedOp
 		if (binding.root.length > 0) {
 			throw new Error('The Shared Document already has content. Seed it only once.');
 		}
+		// A dry run before the binding writes anything. The Shared Document stores Lexical nodes,
+		// so a node type without its Extension would be written as a placeholder and lost.
+		importSnapshot(editor, snapshot);
+		const unsupported = unsupportedTypesOf(editor);
+		if (unsupported.length > 0) {
+			throw new Error(
+				`Seeding needs the Extensions of every node type in the Snapshot. Missing: ${[...new Set(unsupported)].join(', ')}.`
+			);
+		}
 		editor.registerUpdateListener(
 			({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
 				syncLexicalUpdateToYjsV2__EXPERIMENTAL(
@@ -81,7 +91,8 @@ export function seedSharedDocument(doc: Doc, snapshot: Snapshot, options: SeedOp
 				);
 			}
 		);
-		// importSnapshot commits synchronously, so the listener writes the content before dispose.
+		// Imports again, now with the listener. importSnapshot commits synchronously, so the
+		// listener writes the content before dispose.
 		importSnapshot(editor, snapshot);
 	} finally {
 		editor.dispose();
